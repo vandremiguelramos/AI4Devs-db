@@ -1,0 +1,305 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tabelas de domínio para status e tipos
+model StatusType {
+  id               Int            @id @default(autoincrement())
+  name             String         @unique @db.VarChar(50)
+  category         String         @db.VarChar(50) // application, position, interview
+  positions        Position[]     @relation("PositionStatus")
+  applications     Application[]  @relation("ApplicationStatus")
+  interviews       Interview[]    @relation("InterviewResult")
+}
+
+model Company {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(100)
+  employees Employee[]
+  positions Position[]
+  locations CompanyLocation[]
+
+  @@index([name])
+}
+
+model CompanyLocation {
+  id         Int      @id @default(autoincrement())
+  company_id Int
+  company    Company  @relation(fields: [company_id], references: [id])
+  city       String   @db.VarChar(100)
+  state      String?  @db.VarChar(50)
+  country    String   @db.VarChar(50)
+  is_remote  Boolean  @default(false)
+  positions  Position[]
+
+  @@index([company_id])
+  @@index([city])
+  @@index([is_remote])
+}
+
+model Employee {
+  id                      Int                       @id @default(autoincrement())
+  company_id              Int
+  company                 Company                   @relation(fields: [company_id], references: [id])
+  name                    String                    @db.VarChar(100)
+  email                   String                    @db.VarChar(255)
+  role                    String                    @db.VarChar(100)
+  is_active               Boolean                   @default(true)
+  interviews              Interview[]
+  applicationStatusChanges ApplicationStatusHistory[] @relation("ChangedByEmployee")
+  interviewResultChanges   InterviewResultHistory[]   @relation("ChangedByEmployee")
+
+  @@index([company_id])
+  @@index([email])
+  @@index([role])
+  @@index([is_active])
+}
+
+model InterviewFlow {
+  id          Int            @id @default(autoincrement())
+  description String         @db.VarChar(255)
+  steps       InterviewStep[]
+  positions   Position[]
+
+  @@index([description])
+}
+
+model InterviewType {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique @db.VarChar(100)
+  description String?        @db.Text
+  steps       InterviewStep[]
+
+  @@index([name])
+}
+
+model InterviewStep {
+  id               Int           @id @default(autoincrement())
+  interview_flow_id Int
+  interviewFlow    InterviewFlow @relation(fields: [interview_flow_id], references: [id])
+  interview_type_id Int
+  interviewType    InterviewType @relation(fields: [interview_type_id], references: [id])
+  name             String        @db.VarChar(100)
+  order_index      Int
+  interviews       Interview[]
+
+  @@index([interview_flow_id])
+  @@index([interview_type_id])
+  @@index([order_index])
+}
+
+model Position {
+  id                 Int              @id @default(autoincrement())
+  company_id         Int
+  company            Company          @relation(fields: [company_id], references: [id])
+  location_id        Int
+  location           CompanyLocation  @relation(fields: [location_id], references: [id])
+  interview_flow_id  Int
+  interviewFlow      InterviewFlow    @relation(fields: [interview_flow_id], references: [id])
+  title              String           @db.VarChar(100)
+  status_id          Int
+  status             StatusType       @relation("PositionStatus", fields: [status_id], references: [id])
+  is_visible         Boolean          @default(true)
+  applications       Application[]
+  details            PositionDetails?
+  salary             PositionSalary?
+  
+  @@index([company_id])
+  @@index([location_id])
+  @@index([interview_flow_id])
+  @@index([status_id])
+  @@index([is_visible])
+  @@index([company_id, is_visible])
+  @@index([title])
+}
+
+model PositionDetails {
+  id                 Int      @id @default(autoincrement())
+  position_id        Int      @unique
+  position           Position @relation(fields: [position_id], references: [id])
+  description        String?  @db.Text
+  job_description    String?  @db.Text
+  requirements       String?  @db.Text
+  responsibilities   String?  @db.Text
+  company_description String? @db.Text
+  application_deadline DateTime? @db.Date
+  contact_info       String?  @db.VarChar(255)
+
+  @@index([position_id])
+  @@index([application_deadline])
+}
+
+model PositionSalary {
+  id               Int      @id @default(autoincrement())
+  position_id      Int      @unique
+  position         Position @relation(fields: [position_id], references: [id])
+  salary_min       Decimal? @db.Decimal(10,2)
+  salary_max       Decimal? @db.Decimal(10,2)
+  employment_type  String?  @db.VarChar(50)
+  benefits         String?  @db.Text
+
+  @@index([position_id])
+  @@index([employment_type])
+  @@index([salary_min, salary_max])
+}
+
+model Address {
+  id          Int        @id @default(autoincrement())
+  street      String?    @db.VarChar(100)
+  city        String     @db.VarChar(100)
+  state       String?    @db.VarChar(50)
+  postal_code String?    @db.VarChar(20)
+  country     String     @db.VarChar(50)
+  candidates  Candidate[]
+
+  @@index([city])
+  @@index([country])
+}
+
+model Candidate {
+  id                Int               @id @default(autoincrement())
+  firstName         String            @db.VarChar(100)
+  lastName          String            @db.VarChar(100)
+  email             String            @unique @db.VarChar(255)
+  phone             String?           @db.VarChar(15)
+  address_id        Int?
+  address           Address?          @relation(fields: [address_id], references: [id])
+  educations        Education[]
+  workExperiences   WorkExperience[]
+  resumes           Resume[]
+  applications      Application[]
+
+  @@index([firstName, lastName])
+  @@index([email])
+  @@index([address_id])
+}
+
+model Education {
+  id            Int       @id @default(autoincrement())
+  institution   String    @db.VarChar(100)
+  title         String    @db.VarChar(250)
+  startDate     DateTime
+  endDate       DateTime?
+  candidateId   Int
+  candidate     Candidate @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+  @@index([institution])
+}
+
+model WorkExperience {
+  id          Int       @id @default(autoincrement())
+  company     String    @db.VarChar(100)
+  position    String    @db.VarChar(100)
+  description String?   @db.VarChar(200)
+  startDate   DateTime
+  endDate     DateTime?
+  candidateId Int
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+  @@index([company])
+  @@index([position])
+}
+
+model Resume {
+  id          Int       @id @default(autoincrement())
+  filePath    String    @db.VarChar(500)
+  fileType    String    @db.VarChar(50)
+  uploadDate  DateTime
+  candidateId Int
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+  @@index([fileType])
+  @@index([uploadDate])
+}
+
+model Application {
+  id               Int        @id @default(autoincrement())
+  position_id      Int
+  position         Position   @relation(fields: [position_id], references: [id])
+  candidate_id     Int
+  candidate        Candidate  @relation(fields: [candidate_id], references: [id])
+  application_date DateTime   @db.Date
+  status_id        Int
+  status           StatusType @relation("ApplicationStatus", fields: [status_id], references: [id])
+  notes            String?    @db.Text
+  interviews       Interview[]
+  statusHistory    ApplicationStatusHistory[]
+
+  @@index([position_id])
+  @@index([candidate_id])
+  @@index([status_id])
+  @@index([application_date])
+  @@index([position_id, status_id])
+}
+
+model ApplicationStatusHistory {
+  id               Int        @id @default(autoincrement())
+  application_id   Int
+  application      Application @relation(fields: [application_id], references: [id])
+  old_status_id    Int?
+  new_status_id    Int
+  change_date      DateTime   @default(now())
+  changed_by_id    Int?
+  changed_by       Employee?  @relation("ChangedByEmployee", fields: [changed_by_id], references: [id])
+  notes            String?    @db.Text
+
+  @@index([application_id])
+  @@index([change_date])
+  @@index([changed_by_id])
+}
+
+model Interview {
+  id                Int           @id @default(autoincrement())
+  application_id    Int
+  application       Application   @relation(fields: [application_id], references: [id])
+  interview_step_id Int
+  interviewStep     InterviewStep @relation(fields: [interview_step_id], references: [id])
+  employee_id       Int
+  employee          Employee      @relation(fields: [employee_id], references: [id])
+  interview_date    DateTime      @db.Date
+  result_id         Int?
+  result            StatusType?   @relation("InterviewResult", fields: [result_id], references: [id])
+  score             Int?
+  notes             String?       @db.Text
+  resultHistory     InterviewResultHistory[]
+
+  @@index([application_id])
+  @@index([interview_step_id])
+  @@index([employee_id])
+  @@index([interview_date])
+  @@index([result_id])
+  @@index([application_id, result_id])
+}
+
+model InterviewResultHistory {
+  id               Int        @id @default(autoincrement())
+  interview_id     Int
+  interview        Interview  @relation(fields: [interview_id], references: [id])
+  old_result_id    Int?
+  new_result_id    Int
+  change_date      DateTime   @default(now())
+  changed_by_id    Int?
+  changed_by       Employee?  @relation("ChangedByEmployee", fields: [changed_by_id], references: [id])
+  old_score        Int?
+  new_score        Int?
+  notes            String?    @db.Text
+
+  @@index([interview_id])
+  @@index([change_date])
+  @@index([changed_by_id])
+}
